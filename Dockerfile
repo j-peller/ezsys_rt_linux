@@ -17,10 +17,10 @@ WORKDIR /app
 COPY . .
 
 # Configure and build your project
-RUN cmake . && make
+RUN cmake -DCMAKE_BUILD_TYPE=Release . && make
 
 # Stage 2: Export the final binary
 FROM scratch AS export-stage
 # Copy the final binary from the build stage.
 # Adjust the path and binary name accordingly.
-COPY --from=build /app/bin/RPISignal /RPISignal
+COPY --from=build /app/RPISignal /RPISignal

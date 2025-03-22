@@ -1,132 +1,105 @@
-#define _GNU_SOURCE
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <pthread.h>
-#include <inttypes.h>
-#include <time.h>
-#include <gpiod.h>
-#include <sched.h>
-
-#define CPU_CORE        0       /* */
-#define SCHED_PRIO      10
-#define SIGNAL_FREQ     500
-#define GPIO_PIN        17
-
-#define SEC_IN_NS       1000000000L
-#define PERIOD_NS       (SEC_IN_NS / ( 2 * SIGNAL_FREQ ))
-
-typedef struct {
-    struct gpiod_chip*  chip;
-    struct gpiod_line*  line;
-} gpio_handle_t;
-
-typedef struct {
-    gpio_handle_t*  gpio;
-    int             killswitch;
-} thread_args_t;
-
-
-// Initialisiert den gewünschten GPIO-Port und gibt einen Handle zurück
-gpio_handle_t* init_gpio(int gpio_pin, const char* gpio_chip) {
-    gpio_handle_t* handle = malloc(sizeof(gpio_handle_t));
-    if (!handle) {
-        perror("Fehler bei malloc");
-        return NULL;
-    }
-
-    if (gpio_chip == NULL) {
-        perror("Fehler, kein GPIO Chip gegeben. Nutze gpioinfo, um herauszufinden welchen chip du benötigst");
-        free(handle);
-        return NULL;
-    }
-
-    handle->chip = gpiod_chip_open(gpio_chip);
-    if (!handle->chip) {
-        perror("Fehler beim Öffnen des GPIO-Chips");
-        free(handle);
-        return NULL;
-    }
-    handle->line = gpiod_chip_get_line(handle->chip, gpio_pin);
-    if (!handle->line) {
-        perror("Fehler beim Abrufen der GPIO-Leitung");
-        gpiod_chip_close(handle->chip);
-        free(handle);
-        return NULL;
-    }
-    if (gpiod_line_request_output(handle->line, "RPiSignal", 0) < 0) {
-        perror("Fehler bei der Konfiguration der GPIO-Leitung als Ausgang");
-        gpiod_chip_close(handle->chip);
-        free(handle);
-        return NULL;
-    }
-    return handle;
-}
-
 /**
  * 
  */
-int stick_thread_to_core(uint8_t core_id) {
-    cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
-    CPU_SET(core_id, &cpuset);
 
-    int ret = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
-    if(ret != 0) {
-        perror("Fehler beim Setzen der CPU-Affinität\n");
-    }
+#include "main.h"
+#include "ringbuffer.h"
 
-    return ret;
-}
+#define CPU_CORE        0                   /* CPU Core to execute signal generation on */
+#define SCHED_PRIO      10                  /* Priority of the signal generation Thread */
+#define SIGNAL_FREQ     10                  /* Target signal frequency*/
+#define GPIO_PIN        17                  /* GPIO PIN number */
+#define GPIO_CHIP       "/dev/gpiochip4"    /* GPIO Chip number. Use 'gpioinfo' to get this information */
+
 
 /**
- * 
+ * @brief Worker thread that toggles a GPIO pin and logs the delay into a ring buffer
+ *        
  */
-int set_thread_priority(uint8_t priority) {
-    struct sched_param schedParam;
-    schedParam.sched_priority = priority;
-    int ret = pthread_setschedparam(pthread_self(), SCHED_FIFO, &schedParam);
-    if(ret != 0) {
-        perror("Fehler beim Setzen des Echtzeit-Schedulings: %s\n");
-    }
-    return ret;
-}
-
-uint64_t timespec_delta_nanoseconds(struct timespec* end, struct timespec* start)
-{
-    return ( ((end->tv_sec - start->tv_sec)*1.0e9) + (end->tv_nsec - start->tv_nsec) );
-}
-
 void* worker_signal_gen(void* args) {
     thread_args_t* param = (thread_args_t*)args;
-
+    
+    /* Fixiate this thread to CPU_CORE */
     stick_thread_to_core(CPU_CORE);
 
-    set_thread_priority(SCHED_PRIO);
+    // Optionally set thread priority -- this requires ROOT privileges!
+    // set_thread_priority(SCHED_PRIO);
 
     int current_state = 0;
-
-    /* Start der Messung erfassen */
     struct timespec start, now;
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+    uint64_t sampleCount = 0;
 
-    while (!param->killswitch)
-    {
+    /* Until user stops main program */
+    while (!param->killswitch) {
+
+        /* get current timestamp */
         clock_gettime(CLOCK_MONOTONIC_RAW, &now);
-
-        /* toggle den GPIO pin */
         uint64_t diff = timespec_delta_nanoseconds(&now, &start);
-        if (diff  >= PERIOD_NS) {
+
+        /* Check if a period has passed */
+        if (diff >= PERIOD_NS) {
             current_state = !current_state;
+            /* toogle GPIO pin */
             gpiod_line_set_value(param->gpio->line, current_state);
+
+            /* set start timestamp to current timestamp */
+            start = now;
+
+            /* Write time difference to ring buffer */
+            measurement_t m;
+            m.sampleCount = sampleCount++;
+            m.diff = diff;
+            ring_buffer_queue_arr(param->rbuffer, (char*)&m, sizeof(measurement_t));
         }
     }
-
     pthread_exit(NULL);
 }
 
+
+
+
 int main() {
-    printf("Hello World\n");
+    gpio_handle_t *gpio = init_gpio(GPIO_PIN, GPIO_CHIP);
+    if (!gpio) {
+        fprintf(stderr, "GPIO-Initialisierung fehlgeschlagen\n");
+        return EXIT_FAILURE;
+    }
+
+    /* Initialize the ring buffer for measurements */
+    size_t buffer_size = 10 * 1024 * sizeof(measurement_t);
+    char buffer[buffer_size];
+    ring_buffer_t ring_buffer;
+    ring_buffer_init(&ring_buffer, buffer, buffer_size);
+
+    thread_args_t targs;
+    targs.gpio = gpio;
+    targs.rbuffer = &ring_buffer;
+    targs.killswitch = 0;
+
+    pthread_t worker, plot_thread;
+    int ret = pthread_create(&worker, NULL, &worker_signal_gen, &targs);
+    if (ret != 0) {
+        fprintf(stderr, "Error spawning Worker-Thread\n");
+        return EXIT_FAILURE;
+    }
+
+    ret = pthread_create(&plot_thread, NULL, &worker_plot, &targs);
+    if (ret != 0) {
+        fprintf(stderr, "Error spawning Plot-Thread\n");
+        return EXIT_FAILURE;
+    }
+
+    /* Wait for user input to stop the program */
+    getchar();
+    targs.killswitch = 1;
+
+    pthread_join(worker, NULL);
+    pthread_join(plot_thread, NULL);
+
+    /* Clean up */
+    gpiod_chip_close(gpio->chip);
+    free(gpio);
 
     return EXIT_SUCCESS;
 }

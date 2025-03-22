@@ -9,12 +9,7 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
 endif()
 
-set(OUTPUT_BIN "${CMAKE_BINARY_DIR}/bin")
-file(MAKE_DIRECTORY ${OUTPUT_BIN})
-
-
-# Direct CMake to place executables and libraries in the desired directories
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OUTPUT_BIN})
+set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3")
 
 # Collect all .cpp files in the src/ directory (you can add other extensions as needed)
 file(GLOB_RECURSE SRC_FILES "${CMAKE_SOURCE_DIR}/src/*.c")
