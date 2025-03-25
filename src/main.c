@@ -5,13 +5,6 @@
 #include "main.h"
 #include "ringbuffer.h"
 
-#define CPU_CORE        0                   /* CPU Core to execute signal generation on */
-#define SCHED_PRIO      10                  /* Priority of the signal generation Thread */
-#define SIGNAL_FREQ     10                  /* Target signal frequency*/
-#define GPIO_PIN        17                  /* GPIO PIN number */
-#define GPIO_CHIP       "/dev/gpiochip4"    /* GPIO Chip number. Use 'gpioinfo' to get this information */
-
-
 /**
  * @brief Worker thread that toggles a GPIO pin and logs the delay into a ring buffer
  *        
@@ -76,6 +69,7 @@ int main() {
     targs.gpio = gpio;
     targs.rbuffer = &ring_buffer;
     targs.killswitch = 0;
+    targs.doPlot = 1;
 
     pthread_t worker, plot_thread;
     int ret = pthread_create(&worker, NULL, &worker_signal_gen, &targs);
@@ -84,7 +78,7 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    ret = pthread_create(&plot_thread, NULL, &worker_plot, &targs);
+    ret = pthread_create(&plot_thread, NULL, &worker_data_handler, &targs);
     if (ret != 0) {
         fprintf(stderr, "Error spawning Plot-Thread\n");
         return EXIT_FAILURE;
