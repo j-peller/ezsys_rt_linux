@@ -14,7 +14,7 @@ set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3")
 # Collect all .cpp files in the src/ directory (you can add other extensions as needed)
 file(GLOB_RECURSE SRC_FILES "${CMAKE_SOURCE_DIR}/src/*.c")
 
-set(CMAKE_EXE_LINKER_FLAGS "-static")
+#set(CMAKE_EXE_LINKER_FLAGS "-static")
 
 # Create an executable target using the collected source files
 add_executable(${PROJECT_NAME} ${SRC_FILES})
