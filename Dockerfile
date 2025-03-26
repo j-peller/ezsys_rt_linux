@@ -17,7 +17,8 @@ WORKDIR /app
 COPY . .
 
 # Configure and build your project
-RUN cmake -DCMAKE_BUILD_TYPE=Release . && make
+#RUN cmake -DCMAKE_BUILD_TYPE=Debug . && make
+RUN cmake -DCMAKE_BUILD_TYPE=${BUILD_TYPE} . && make
 
 # Stage 2: Export the final binary
 FROM scratch AS export-stage

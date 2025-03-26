@@ -50,7 +50,7 @@ gpio_handle_t* init_gpio(int gpio_pin, const char* gpio_chip) {
  * @param core_id The CPU core ID.
  * @return int 0 on success, or an error code on failure.
  */
-int stick_thread_to_core(uint8_t core_id) {
+int stick_thread_to_core(int core_id) {
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
     CPU_SET(core_id, &cpuset);
@@ -68,7 +68,7 @@ int stick_thread_to_core(uint8_t core_id) {
  * @param priority The thread priority.
  * @return int 0 on success, or an error code on failure.
  */
-int set_thread_priority(uint8_t priority) {
+int set_thread_priority(int priority) {
     struct sched_param schedParam;
     schedParam.sched_priority = priority;
     int ret = pthread_setschedparam(pthread_self(), SCHED_FIFO, &schedParam);
@@ -87,6 +87,27 @@ int set_thread_priority(uint8_t priority) {
  */
 inline uint64_t timespec_delta_nanoseconds(struct timespec* end, struct timespec* start) {
     return (((end->tv_sec - start->tv_sec) * 1.0e9) + (end->tv_nsec - start->tv_nsec));
+}
+
+/**
+ * @brief Calculate the clock_gettime() function call overhead.
+ * 
+ * @return uint64_t overhead in nanoseconds.
+ */
+uint64_t get_clock_gettime_overhead() {
+    struct timespec start, end;
+    uint64_t overhead = 0;
+
+    /* Warm up cache */
+    for (int i = 0; i < 10; i++) {
+        clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+        clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+    }
+
+    /* Measure overhead */
+    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+    return timespec_delta_nanoseconds(&end, &start);
 }
 
 /**
@@ -151,7 +172,7 @@ void write_to_file(const char* filename, measurement_t* m, size_t num) {
  * @param args Pointer to the thread arguments (thread_args_t).
  * @return void* Always returns NULL.
  */
-void* worker_data_handler(void* args) {
+void* func_data_handler(void* args) {
     thread_args_t* param = (thread_args_t*)args;
     FILE* gp = NULL;
 
@@ -174,16 +195,19 @@ void* worker_data_handler(void* args) {
         }
 
         if (param->doPlot) {
-            plot_to_gnuplot(all_measurements, all_count, gp);
+            plot_to_gnuplot(all_measurements, all_count, gp, param->period_ns);
         }
 
         usleep(WINDOW_REFRESH * 1000);  // WINDOW_REFRESH in ms (e.g. 500 ms)
     }
         
-    /* Write all recorded timestamps to csv file */
+    /* Write all recorded timestamps to csv file for post processing */
     write_to_file(filename, all_measurements, all_count);
 
-    free(all_measurements);
+    if (all_measurements != NULL) {
+        free(all_measurements);
+    }
+
     if (gp) {
         fclose(gp);
     }
@@ -223,7 +247,7 @@ FILE* setup_gnuplot() {
  * @param num The number of measurements.
  * @param gp The GNUPlot pipe.
  */
-void plot_to_gnuplot(measurement_t* m, size_t num, FILE* gp) {
+void plot_to_gnuplot(measurement_t* m, size_t num, FILE* gp, uint64_t period_ns) {
     if (num > 0) {
         size_t start_index = (num > WINDOW_SIZE) ? (num - WINDOW_SIZE) : 0;
         size_t count = num - start_index;
@@ -231,7 +255,7 @@ void plot_to_gnuplot(measurement_t* m, size_t num, FILE* gp) {
 
         for (size_t i = start_index; i < num; i++) {
             int64_t diff = (int64_t)m[i].diff;
-            int64_t jitter = diff - (int64_t)PERIOD_NS;
+            int64_t jitter = diff - (int64_t)period_ns;
             jitters[i - start_index] = jitter;
         }
 
@@ -276,5 +300,60 @@ void plot_to_gnuplot(measurement_t* m, size_t num, FILE* gp) {
         fprintf(gp, "%" PRIu64 " %d\n", x_max, 0);
         fprintf(gp, "e\n");
         fflush(gp);
+    }
+}
+
+void print_help(const char* progname) {
+    printf("Usage: %s\n", progname);
+    printf("Options:\n");
+    printf("  -c <cpu core>\t\tSet CPU Core to execute signal generation on\n");
+    printf("  -f <freq>\t\tSet signal frequency in Hz\n");
+    printf("  -p \t\tPlot live jitter using gnuplot\n");
+    printf("  -h\t\tShow this help message\n");
+}
+
+void parse_user_args(int argc, char* argv[], thread_args_t* targs) {
+    int opt;
+    int cpu_core    = CPU_CORE;     // Default CPU core
+    int signal_freq = SIGNAL_FREQ;  // Default signal frequency
+
+    while ((opt = getopt(argc, argv, "c:f:ph")) != -1) {
+        switch (opt) {
+            case 'c':
+                cpu_core = atoi(optarg);
+                if (cpu_core < 0 || cpu_core >= sysconf(_SC_NPROCESSORS_ONLN)) {
+                    fprintf(stderr, "Invalid CPU core\n");
+                    exit(EXIT_FAILURE);
+                }
+                targs->core_id = cpu_core;
+                break;
+
+            case 'f':
+                signal_freq = atoi(optarg);
+                if (signal_freq <= 0 || signal_freq > 1000000) {
+                    fprintf(stderr, "Invalid signal frequency\n");
+                    exit(EXIT_FAILURE);
+                }
+                targs->period_ns = PERIOD_NS(signal_freq);
+                break;
+
+            case 'p':
+                int result = system("gnuplot --version > /dev/null 2>&1");
+                if (result != 0) {
+                    fprintf(stderr, "GNUPlot not found. Please install GNUPlot to enable plotting\n");
+                    targs->doPlot = false;
+                    break;
+                }
+                targs->doPlot = true;
+                break;
+
+            case 'h':
+                print_help(argv[0]);
+                exit(EXIT_SUCCESS);
+
+            default:
+                fprintf(stderr, "Usage: %s [-h]\n", argv[0]);
+                exit(EXIT_FAILURE);
+        }
     }
 }

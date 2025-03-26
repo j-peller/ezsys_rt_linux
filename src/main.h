@@ -21,11 +21,13 @@
 #define GPIO_PIN        17                  /* GPIO PIN number */
 #define GPIO_CHIP       "/dev/gpiochip4"    /* GPIO Chip number. Use 'gpioinfo' to get this information */
 
-#define SEC_IN_NS       1000000000L
-#define PERIOD_NS       (SEC_IN_NS / ( 2 * SIGNAL_FREQ ))
+#define SEC_IN_NS           1000000000L
+#define PERIOD_NS(freq)     (SEC_IN_NS / ( 2 * freq ))
 
 #define WINDOW_SIZE     100                 /* Samples to show in GNUPlot */
 #define WINDOW_REFRESH  200                 /* Refresh GNUPLot every 200ms */
+
+#define RING_BUFFER_SIZE 1024               /* Number of measurement_t elements in the ring buffer */
 
 typedef struct {
     struct gpiod_chip*  chip;
@@ -35,9 +37,11 @@ typedef struct {
 typedef struct {
     gpio_handle_t*  gpio;
     ring_buffer_t*  rbuffer;
+    uint64_t        period_ns;
     int             timer_fd;
-    int             killswitch;
-    int             doPlot;
+    int             core_id;
+    bool            killswitch;
+    bool            doPlot;
 } thread_args_t;
 
 typedef struct {
@@ -46,13 +50,14 @@ typedef struct {
 } measurement_t;
 
 extern gpio_handle_t* init_gpio(int gpio_pin, const char* gpio_chip);
-extern int stick_thread_to_core(uint8_t core_id);
-extern int set_thread_priority(uint8_t priority);
+extern int stick_thread_to_core(int core_id);
+extern int set_thread_priority(int priority);
 extern inline uint64_t timespec_delta_nanoseconds(struct timespec* end, struct timespec* start);
-//extern void* worker_plot(void* args);
-extern void* worker_data_handler(void* args);
+extern void* func_data_handler(void* args);
 extern void write_to_file(const char* filename, measurement_t* m, size_t num);
 extern FILE* setup_gnuplot();
-extern void plot_to_gnuplot(measurement_t* m, size_t num, FILE* gp);
+extern void plot_to_gnuplot(measurement_t* m, size_t num, FILE* gp, uint64_t period_ns);
+extern uint64_t get_clock_gettime_overhead();
+extern void parse_user_args(int argc, char* argv[], thread_args_t* targs);
 
 #endif
