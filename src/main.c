@@ -49,7 +49,7 @@ void* func_signal_gen(void* args) {
             measurement_t m;
             m.sampleCount = sampleCount++;
             m.diff = diff;
-            ring_buffer_queue_arr(param->rbuffer, (char*)&m, sizeof(measurement_t));
+            ring_buffer_queue_arr(param->rbuffer, (char*)&diff, sizeof(uint64_t));
         }
     }
     pthread_exit(NULL);

@@ -121,7 +121,9 @@ uint64_t get_clock_gettime_overhead() {
  */
 int dequeue_measurements(ring_buffer_t* rbuffer, measurement_t** all_measurements, size_t* all_count, size_t* capacity) {
     measurement_t m;
-    while (ring_buffer_dequeue_arr(rbuffer, (char*)&m, sizeof(measurement_t)) == sizeof(measurement_t)) {
+    uint64_t diff;
+    while (ring_buffer_dequeue_arr(rbuffer, (char*)&diff, sizeof(uint64_t)) == sizeof(uint64_t)) {
+    //while (ring_buffer_dequeue_arr(rbuffer, (char*)&m, sizeof(measurement_t)) == sizeof(measurement_t)) {
         if (*all_count >= *capacity) {
             size_t new_capacity = (*capacity == 0) ? INITIAL_CAPACITY : (*capacity * CAPACITY_MULTIPLIER);
             measurement_t* temp = realloc(*all_measurements, new_capacity * sizeof(measurement_t));
@@ -132,6 +134,8 @@ int dequeue_measurements(ring_buffer_t* rbuffer, measurement_t** all_measurement
             *all_measurements = temp;
             *capacity = new_capacity;
         }
+        m.sampleCount = (*all_count == 0) ? 0 : (*all_measurements)[*all_count - 1].sampleCount + 1;
+        m.diff = diff;
         (*all_measurements)[(*all_count)++] = m;
     }
     return 0;
@@ -155,7 +159,8 @@ void write_to_file(const char* filename, measurement_t* m, size_t num) {
     }
 
     for (size_t i = 0; i < num; ++i) {
-        fprintf(fp, "%ld,%ld\n", m[i].sampleCount, m[i].diff);
+        //fprintf(fp, "%lu,%lu\n", m[i].sampleCount, m[i].diff);
+        fprintf(fp, "%lu,%lu\n", m[i].sampleCount, m[i].diff);
     }
 
     fclose(fp);

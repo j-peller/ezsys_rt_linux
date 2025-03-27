@@ -27,7 +27,7 @@
 #define WINDOW_SIZE     100                 /* Samples to show in GNUPlot */
 #define WINDOW_REFRESH  200                 /* Refresh GNUPLot every 200ms */
 
-#define RING_BUFFER_SIZE 1024               /* Number of measurement_t elements in the ring buffer */
+#define RING_BUFFER_SIZE 4096               /* Number of measurement_t elements in the ring buffer */
 
 typedef struct {
     struct gpiod_chip*  chip;
