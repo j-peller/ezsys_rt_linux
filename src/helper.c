@@ -123,7 +123,6 @@ int dequeue_measurements(ring_buffer_t* rbuffer, measurement_t** all_measurement
     measurement_t m;
     uint64_t diff;
     while (ring_buffer_dequeue_arr(rbuffer, (char*)&diff, sizeof(uint64_t)) == sizeof(uint64_t)) {
-    //while (ring_buffer_dequeue_arr(rbuffer, (char*)&m, sizeof(measurement_t)) == sizeof(measurement_t)) {
         if (*all_count >= *capacity) {
             size_t new_capacity = (*capacity == 0) ? INITIAL_CAPACITY : (*capacity * CAPACITY_MULTIPLIER);
             measurement_t* temp = realloc(*all_measurements, new_capacity * sizeof(measurement_t));
@@ -159,7 +158,6 @@ void write_to_file(const char* filename, measurement_t* m, size_t num) {
     }
 
     for (size_t i = 0; i < num; ++i) {
-        //fprintf(fp, "%lu,%lu\n", m[i].sampleCount, m[i].diff);
         fprintf(fp, "%lu,%lu\n", m[i].sampleCount, m[i].diff);
     }
 
@@ -335,7 +333,7 @@ void parse_user_args(int argc, char* argv[], thread_args_t* targs) {
 
             case 'f':
                 signal_freq = atoi(optarg);
-                if (signal_freq <= 0 || signal_freq > 1000000) {
+                if (signal_freq <= 0 || signal_freq > MAX_SIGNAL_FREQ) {
                     fprintf(stderr, "Invalid signal frequency\n");
                     exit(EXIT_FAILURE);
                 }

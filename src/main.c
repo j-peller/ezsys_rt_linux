@@ -15,16 +15,12 @@ void* func_signal_gen(void* args) {
     /* Fixiate this thread to CPU_CORE */
     stick_thread_to_core(param->core_id);
 
-    // Optionally set thread priority -- this requires ROOT privileges!
-    // set_thread_priority(SCHED_PRIO);
-    
     /* calculate clock_gettime overhead */
     uint64_t err = get_clock_gettime_overhead();
 
     int current_state = 0;
     struct timespec start, now;
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-    uint64_t sampleCount = 0;
 
     /* Until user stops main program */
     while (!param->killswitch) {
@@ -46,9 +42,6 @@ void* func_signal_gen(void* args) {
             start = now;
 
             /* Write time difference to ring buffer */
-            measurement_t m;
-            m.sampleCount = sampleCount++;
-            m.diff = diff;
             ring_buffer_queue_arr(param->rbuffer, (char*)&diff, sizeof(uint64_t));
         }
     }

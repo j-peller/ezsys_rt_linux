@@ -21,6 +21,7 @@
 #define GPIO_PIN        17                  /* GPIO PIN number */
 #define GPIO_CHIP       "/dev/gpiochip4"    /* GPIO Chip number. Use 'gpioinfo' to get this information */
 
+#define MAX_SIGNAL_FREQ     10000           /* MAX Target signal frequency*/
 #define SEC_IN_NS           1000000000L
 #define PERIOD_NS(freq)     (SEC_IN_NS / ( 2 * freq ))
 
