@@ -1,7 +1,20 @@
-#include "main.h"
+#include "../inc/main.h"
+
+#include <string.h>
+
 
 #define INITIAL_CAPACITY 1024
 #define CAPACITY_MULTIPLIER 2
+
+/**
+ * Forward declarations
+ */
+
+FILE* setup_gnuplot();
+void plot_to_gnuplot(measurement_t* m, size_t num, FILE* gp, uint64_t period_ns);
+void print_help(const char* progname);
+
+
 
 /**
  * @brief Initialize the GPIO port and return a handle.
@@ -79,24 +92,12 @@ int set_thread_priority(int priority) {
 }
 
 /**
- * @brief Calculate the difference in nanoseconds between two timespecs.
- *
- * @param end The end timespec.
- * @param start The start timespec.
- * @return uint64_t The difference in nanoseconds.
- */
-inline uint64_t timespec_delta_nanoseconds(struct timespec* end, struct timespec* start) {
-    return (((end->tv_sec - start->tv_sec) * 1.0e9) + (end->tv_nsec - start->tv_nsec));
-}
-
-/**
  * @brief Calculate the clock_gettime() function call overhead.
  * 
  * @return uint64_t overhead in nanoseconds.
  */
 uint64_t get_clock_gettime_overhead() {
     struct timespec start, end;
-    uint64_t overhead = 0;
 
     /* Warm up cache */
     for (int i = 0; i < 10; i++) {
@@ -148,7 +149,7 @@ int dequeue_measurements(ring_buffer_t* rbuffer, measurement_t** all_measurement
  * @param num The number of measurements.
  */
 void write_to_file(const char* filename, measurement_t* m, size_t num) {
-    if (filename == NULL || m == NULL) {
+    if (m == NULL) {
         return;
     }
 
@@ -177,14 +178,14 @@ void write_to_file(const char* filename, measurement_t* m, size_t num) {
  */
 void* func_data_handler(void* args) {
     thread_args_t* param = (thread_args_t*)args;
+
+    /* Stick data handler to other core than signal generator */
+    int core = (param->core_id + 1) % sysconf(_SC_NPROCESSORS_ONLN);
+    stick_thread_to_core(core);
+
+    /* Gnuplot pipe descriptor */
     FILE* gp = NULL;
 
-    char filename[64];
-    time_t now = time(NULL);
-    struct tm *tm_info = localtime(&now);
-    // Format: "data_20230324_134501.csv"
-    strftime(filename, sizeof(filename), "jitter_log_%Y%m%d_%H%M%S.csv", tm_info);
-    
     if (param->doPlot) {
         gp = setup_gnuplot();
     }
@@ -205,7 +206,9 @@ void* func_data_handler(void* args) {
     }
         
     /* Write all recorded timestamps to csv file for post processing */
-    write_to_file(filename, all_measurements, all_count);
+    if (*(param->outputFile) != -1) {
+        write_to_file(param->outputFile, all_measurements, all_count);
+    }
 
     if (all_measurements != NULL) {
         free(all_measurements);
@@ -306,21 +309,30 @@ void plot_to_gnuplot(measurement_t* m, size_t num, FILE* gp, uint64_t period_ns)
     }
 }
 
+/**
+ * @brief Print help message for command line arguments.
+ */
 void print_help(const char* progname) {
     printf("Usage: %s\n", progname);
     printf("Options:\n");
     printf("  -c <cpu core>\t\tSet CPU Core to execute signal generation on\n");
     printf("  -f <freq>\t\tSet signal frequency in Hz\n");
-    printf("  -p \t\tPlot live jitter using gnuplot\n");
-    printf("  -h\t\tShow this help message\n");
+    printf("  -o <filename>\t\tFile to export measurement results\n");
+    printf("  -p \t\t\tPlot live jitter using gnuplot\n");
+    printf("  -h \t\t\tShow this help message\n");
 }
 
+
+/**
+ * @brief Parse command line arguments and set thread arguments.
+ */
 void parse_user_args(int argc, char* argv[], thread_args_t* targs) {
     int opt;
     int cpu_core    = CPU_CORE;     // Default CPU core
     int signal_freq = SIGNAL_FREQ;  // Default signal frequency
+    static char filename[64] = {-1};
 
-    while ((opt = getopt(argc, argv, "c:f:ph")) != -1) {
+    while ((opt = getopt(argc, argv, "c:f:o:ph")) != -1) {
         switch (opt) {
             case 'c':
                 cpu_core = atoi(optarg);
@@ -338,6 +350,18 @@ void parse_user_args(int argc, char* argv[], thread_args_t* targs) {
                     exit(EXIT_FAILURE);
                 }
                 targs->period_ns = PERIOD_NS(signal_freq);
+                break;
+
+            case 'o':
+                int len = strlen(optarg);
+                if (len >= sizeof(filename)) {
+                    fprintf(stderr, "Filename too long\n");
+                    exit(EXIT_FAILURE);
+                }
+                strncpy(filename, optarg, len);
+                filename[len] = '\0'; // Ensure null-termination
+                printf("Writing to file: %s\n", filename);
+                targs->outputFile = filename;
                 break;
 
             case 'p':

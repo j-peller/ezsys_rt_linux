@@ -2,12 +2,17 @@
  * 
  */
 
-#include "main.h"
-#include "ringbuffer.h"
+#include "../inc/main.h"
+#include "../inc/ringbuffer.h"
 
 /**
- * @brief Worker thread that toggles a GPIO pin and logs the delay into a ring buffer
- *        
+ * @brief Worker thread that toggles a GPIO pin and logs the delay into a ring buffer.
+ *
+ * This function runs in a separate thread and toggles a GPIO pin at a specified period.
+ * It logs the time difference between toggles into a ring buffer.
+ *
+ * @param args Pointer to the thread arguments (thread_args_t).
+ * @return void* Always returns NULL.
  */
 void* func_signal_gen(void* args) {
     thread_args_t* param = (thread_args_t*)args;
@@ -49,6 +54,9 @@ void* func_signal_gen(void* args) {
 }
 
 
+/**
+ * @brief Main. 
+ */
 int main(int argc, char** argv) {
 
     thread_args_t targs;
@@ -72,6 +80,7 @@ int main(int argc, char** argv) {
     targs.rbuffer = &ring_buffer;
     targs.killswitch = 0;
 
+    /* Create and start worker threads */
     pthread_t worker_signal_gen, worker_data_handler;
     int ret = pthread_create(&worker_signal_gen, NULL, &func_signal_gen, &targs);
     if (ret != 0) {
@@ -86,6 +95,7 @@ int main(int argc, char** argv) {
     }
 
     /* Wait for user input to stop the program */
+    printf("Press Enter to stop...\n");
     getchar();
     targs.killswitch = 1;
 

@@ -1,3 +1,10 @@
+/**
+ * @author  jop6462@thi.de
+ * 
+ */
+
+#pragma once
+
 #ifndef MAIN_H
 #define MAIN_H
 
@@ -13,16 +20,11 @@
 #include <sched.h>
 #include <sys/timerfd.h>
 
+#include "config.h"
 #include "ringbuffer.h"
 
-#define CPU_CORE        0                   /* CPU Core to execute signal generation on */
-#define SCHED_PRIO      10                  /* Priority of the signal generation Thread */
-#define SIGNAL_FREQ     10                  /* Target signal frequency*/
-#define GPIO_PIN        17                  /* GPIO PIN number */
-#define GPIO_CHIP       "/dev/gpiochip4"    /* GPIO Chip number. Use 'gpioinfo' to get this information */
-
 #define MAX_SIGNAL_FREQ     10000           /* MAX Target signal frequency*/
-#define SEC_IN_NS           1000000000L
+#define SEC_IN_NS           1000000000UL    
 #define PERIOD_NS(freq)     (SEC_IN_NS / ( 2 * freq ))
 
 #define WINDOW_SIZE     100                 /* Samples to show in GNUPlot */
@@ -43,6 +45,7 @@ typedef struct {
     int             core_id;
     bool            killswitch;
     bool            doPlot;
+    const char*     outputFile;
 } thread_args_t;
 
 typedef struct {
@@ -50,15 +53,29 @@ typedef struct {
     uint64_t    diff;
 } measurement_t;
 
+
+/**
+ * Function declarations
+ */
+
+extern void* func_data_handler(void* args);
+extern void* func_signal_gen(void* args);
+
 extern gpio_handle_t* init_gpio(int gpio_pin, const char* gpio_chip);
 extern int stick_thread_to_core(int core_id);
 extern int set_thread_priority(int priority);
-extern inline uint64_t timespec_delta_nanoseconds(struct timespec* end, struct timespec* start);
-extern void* func_data_handler(void* args);
-extern void write_to_file(const char* filename, measurement_t* m, size_t num);
-extern FILE* setup_gnuplot();
-extern void plot_to_gnuplot(measurement_t* m, size_t num, FILE* gp, uint64_t period_ns);
-extern uint64_t get_clock_gettime_overhead();
+uint64_t get_clock_gettime_overhead();
 extern void parse_user_args(int argc, char* argv[], thread_args_t* targs);
+
+/**
+ * @brief Calculate the difference in nanoseconds between two timespecs.
+ *
+ * @param end The end timespec.
+ * @param start The start timespec.
+ * @return uint64_t The difference in nanoseconds.
+ */
+static inline uint64_t timespec_delta_nanoseconds(struct timespec* end, struct timespec* start) {
+    return (((end->tv_sec - start->tv_sec) * 1.0e9) + (end->tv_nsec - start->tv_nsec));
+}
 
 #endif
