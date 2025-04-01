@@ -72,17 +72,6 @@ int main(int argc, char** argv) {
         targs.gpio = init_gpio(GPIO_PIN, GPIO_CHIP);
     }
 
-<<<<<<< Updated upstream
-=======
-    int tfd = timerfd_create(CLOCK_MONOTONIC, 0);
-    if (tfd < 0) {
-        fprintf(stderr, "Error creating timerfd\n");
-        gpiod_chip_close(targs.gpio->chip);
-        free(targs.gpio);
-        return EXIT_FAILURE;
-    }
-
->>>>>>> Stashed changes
     /* Initialize ring buffer storing measurement results */
     size_t buffer_size = RING_BUFFER_SIZE * sizeof(measurement_t);
     char buffer[buffer_size];
