@@ -48,3 +48,6 @@ This command will provide an output similar to this:
 ```
 
 # Guide to stress-ng
+
+# Possible causes of high litter
+- System Interrupts and Kernel Tasks (see '/proc/interrupts')

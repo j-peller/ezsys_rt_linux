@@ -10,7 +10,7 @@
 
 
 #define CPU_CORE        0                   /* Default CPU Core to execute signal generation on */
-#define SCHED_PRIO      0                   /* Default priority of the signal generation Thread */
+#define SCHED_PRIO      0                   /* Default priority of the signal generation Thread: 1 lowest / 99 highest. If 0 -> disabled */
 #define SIGNAL_FREQ     10                  /* Default target signal frequency*/
 
 

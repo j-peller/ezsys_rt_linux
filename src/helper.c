@@ -84,7 +84,7 @@ int stick_thread_to_core(int core_id) {
 int set_thread_priority(int priority) {
     struct sched_param schedParam;
     schedParam.sched_priority = priority;
-    int ret = pthread_setschedparam(pthread_self(), SCHED_FIFO, &schedParam);
+    int ret = pthread_setschedparam(pthread_self(), SCHED_RR, &schedParam);
     if(ret != 0) {
         perror("Fehler beim Setzen des Echtzeit-Schedulings");
     }
@@ -318,7 +318,9 @@ void print_help(const char* progname) {
     printf("  -c <cpu core>\t\tSet CPU Core to execute signal generation on\n");
     printf("  -f <freq>\t\tSet signal frequency in Hz\n");
     printf("  -o <filename>\t\tFile to export measurement results\n");
-    printf("  -p \t\t\tPlot live jitter using gnuplot\n");
+    printf("  -d <gpiochipX:XX>\t\tGPIO Chip and Pin number to output signal to\n");
+    printf("  -p <priority>\t\tPriority of the signal generation thread\n");
+    printf("  -g \t\t\tPlot live jitter using gnuplot\n");
     printf("  -h \t\t\tShow this help message\n");
 }
 
@@ -328,28 +330,54 @@ void print_help(const char* progname) {
  */
 void parse_user_args(int argc, char* argv[], thread_args_t* targs) {
     int opt;
-    int cpu_core    = CPU_CORE;     // Default CPU core
-    int signal_freq = SIGNAL_FREQ;  // Default signal frequency
     static char filename[64] = {-1};
 
-    while ((opt = getopt(argc, argv, "c:f:o:ph")) != -1) {
+    while ((opt = getopt(argc, argv, "c:f:d:p:o:gh")) != -1) {
         switch (opt) {
             case 'c':
-                cpu_core = atoi(optarg);
+                int cpu_core = atoi(optarg);
                 if (cpu_core < 0 || cpu_core >= sysconf(_SC_NPROCESSORS_ONLN)) {
-                    fprintf(stderr, "Invalid CPU core\n");
-                    exit(EXIT_FAILURE);
+                    fprintf(stderr, "Invalid CPU core. Setting Default CPU Core: %d\n", CPU_CORE);
+                    targs->core_id = CPU_CORE;
+                    break;
                 }
                 targs->core_id = cpu_core;
                 break;
 
             case 'f':
-                signal_freq = atoi(optarg);
+                int signal_freq = atoi(optarg);
                 if (signal_freq <= 0 || signal_freq > MAX_SIGNAL_FREQ) {
-                    fprintf(stderr, "Invalid signal frequency\n");
-                    exit(EXIT_FAILURE);
+                    fprintf(stderr, "Invalid signal frequency. Setting default singal frequency: %dHz\n", SIGNAL_FREQ);
+                    targs->period_ns = PERIOD_NS(SIGNAL_FREQ);
+                    break;
                 }
                 targs->period_ns = PERIOD_NS(signal_freq);
+                break;
+
+            case 'd':
+                if (strlen(optarg) >= 13) {
+                    fprintf(stderr, "Invalid GPIO Chip. Expected Fromat: gpiochipX:XX\n");
+                    exit(EXIT_FAILURE);
+                }
+                char gpio_chip[15] = "/dev/";
+                strncpy(gpio_chip+5, optarg, 9);
+                gpio_chip[15] = '\0'; // Ensure null-termination
+
+                int gpio_pin = atoi(optarg + 10);
+                if (gpio_pin < 0 || gpio_pin > 31) {
+                    fprintf(stderr, "Invalid GPIO Pin. Expected: gpiochipX:XX\n");
+                    exit(EXIT_FAILURE);
+                }
+
+                printf("Using GPIO Chip: %s, Pin: %d\n", gpio_chip, gpio_pin);
+
+                gpio_handle_t *gpio = init_gpio(gpio_pin, gpio_chip);
+                if (!gpio) {
+                    fprintf(stderr, "GPIO-Initialisierung fehlgeschlagen\n");
+                    exit(EXIT_FAILURE);
+                }
+
+                targs->gpio = gpio;
                 break;
 
             case 'o':
@@ -365,6 +393,16 @@ void parse_user_args(int argc, char* argv[], thread_args_t* targs) {
                 break;
 
             case 'p':
+                int sched_prio = atoi(optarg);
+                if (sched_prio < 0 || sched_prio > 99) {
+                    fprintf(stderr, "Invalid scheduling priority. Setting default scheduling priority: %d\n", SCHED_PRIO);
+                    targs->sched_prio = SCHED_PRIO;
+                    break;
+                }   
+                targs->sched_prio = sched_prio;
+                break;
+
+            case 'g':
                 int result = system("gnuplot --version > /dev/null 2>&1");
                 if (result != 0) {
                     fprintf(stderr, "GNUPlot not found. Please install GNUPlot to enable plotting\n");

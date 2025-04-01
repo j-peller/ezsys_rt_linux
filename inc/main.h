@@ -41,6 +41,7 @@ typedef struct {
     gpio_handle_t*  gpio;
     ring_buffer_t*  rbuffer;
     uint64_t        period_ns;
+    int             sched_prio;
     int             timer_fd;
     int             core_id;
     bool            killswitch;

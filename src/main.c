@@ -20,6 +20,11 @@ void* func_signal_gen(void* args) {
     /* Fixiate this thread to CPU_CORE */
     stick_thread_to_core(param->core_id);
 
+    /* Set thread priority - only if configured */
+    if (param->sched_prio >= 1) {
+        set_thread_priority(param->sched_prio);
+    }
+
     /* calculate clock_gettime overhead */
     uint64_t err = get_clock_gettime_overhead();
 
@@ -62,11 +67,9 @@ int main(int argc, char** argv) {
     thread_args_t targs;
     parse_user_args(argc, argv, &targs);
 
-    /* initialize GPIO Port for output */
-    gpio_handle_t *gpio = init_gpio(GPIO_PIN, GPIO_CHIP);
-    if (!gpio) {
-        fprintf(stderr, "GPIO-Initialisierung fehlgeschlagen\n");
-        return EXIT_FAILURE;
+    /* initialize GPIO Port with default from config.h */
+    if (targs.gpio == NULL) {
+        targs.gpio = init_gpio(GPIO_PIN, GPIO_CHIP);
     }
 
     /* Initialize ring buffer storing measurement results */
@@ -76,7 +79,6 @@ int main(int argc, char** argv) {
     ring_buffer_init(&ring_buffer, buffer, buffer_size);
 
     /* configure thread arguments */
-    targs.gpio = gpio;
     targs.rbuffer = &ring_buffer;
     targs.killswitch = 0;
 
@@ -103,8 +105,8 @@ int main(int argc, char** argv) {
     pthread_join(worker_data_handler, NULL);
 
     /* Clean up */
-    gpiod_chip_close(gpio->chip);
-    free(gpio);
+    gpiod_chip_close(targs.gpio->chip);
+    free(targs.gpio);
 
     return EXIT_SUCCESS;
 }
