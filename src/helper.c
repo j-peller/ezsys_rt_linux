@@ -330,6 +330,16 @@ void print_help(const char* progname) {
  */
 void parse_user_args(int argc, char* argv[], thread_args_t* targs) {
     int opt;
+    
+    /* Init targs */
+    targs->gpio = NULL;
+    targs->core_id = CPU_CORE;
+    targs->period_ns = PERIOD_NS(SIGNAL_FREQ);
+    targs->sched_prio = SCHED_PRIO;
+    targs->doPlot = false;
+    targs->outputFile = NULL;
+    targs->killswitch = false;
+
     static char filename[64] = {-1};
 
     while ((opt = getopt(argc, argv, "c:f:d:p:o:gh")) != -1) {
@@ -355,7 +365,7 @@ void parse_user_args(int argc, char* argv[], thread_args_t* targs) {
                 break;
 
             case 'd':
-                if (strlen(optarg) >= 13) {
+                if (strlen(optarg) >= 13 || optarg[9] != ':' || strlen(optarg) <= 0) {
                     fprintf(stderr, "Invalid GPIO Chip. Expected Fromat: gpiochipX:XX\n");
                     exit(EXIT_FAILURE);
                 }
