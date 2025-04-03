@@ -30,30 +30,30 @@ void* func_signal_gen(void* args) {
 
     int current_state = 0;
     struct timespec start, now;
+    uint64_t diff;
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
 
     /* Until user stops main program */
     while (!param->killswitch) {
 
-        /* get current timestamp */
-        clock_gettime(CLOCK_MONOTONIC_RAW, &now);
+        /* Busy-Wait until next period */
+        do {
+            clock_gettime(CLOCK_MONOTONIC_RAW, &now);
+        } while ((diff = timespec_delta_nanoseconds(&now, &start) - err) < param->period_ns);
 
-        /* calculate time difference, corrected by clock_gettime overhead */
-        uint64_t diff = timespec_delta_nanoseconds(&now, &start) - err;
+        /* toogle GPIO pin */
+        current_state = !current_state;
+        gpiod_line_set_value(param->gpio->line, current_state);
 
-        /* Check if a period has passed */
-        if (diff >= param->period_ns) {
-
-            /* toogle GPIO pin */
-            current_state = !current_state;
-            gpiod_line_set_value(param->gpio->line, current_state);
-
-            /* set start timestamp to current timestamp */
-            start = now;
-
-            /* Write time difference to ring buffer */
-            ring_buffer_queue_arr(param->rbuffer, (char*)&diff, sizeof(uint64_t));
+        /* set start timestamp to next period */
+        start.tv_nsec += param->period_ns;
+        while (start.tv_nsec >= 1e9) {
+            start.tv_nsec -= 1e9;
+            start.tv_sec++;
         }
+
+        /* Write time difference to ring buffer */
+        ring_buffer_queue_arr(param->rbuffer, (char*)&diff, sizeof(uint64_t));
     }
     pthread_exit(NULL);
 }
