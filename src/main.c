@@ -45,15 +45,28 @@ void* func_signal_gen(void* args) {
         current_state = !current_state;
         gpiod_line_set_value(param->gpio->line, current_state);
 
-        /* set start timestamp to next period */
-        start.tv_nsec += param->period_ns;
-        while (start.tv_nsec >= 1e9) {
-            start.tv_nsec -= 1e9;
-            start.tv_sec++;
-        }
-
         /* Write time difference to ring buffer */
         ring_buffer_queue_arr(param->rbuffer, (char*)&diff, sizeof(uint64_t));
+
+        /**
+         * Adjust 'start' to the next valid period in case of delays.
+         * 
+         * If the system was interrupted or delayed, this loop advances the 'start' timestamp 
+         * by 'period_ns' until it is ahead of 'now'. 
+         * 
+         */
+        do {
+            /* increment start by period_ns - this is called at least once */
+            start.tv_nsec += param->period_ns;
+            if (start.tv_nsec >= 1000000000L) {
+                start.tv_sec += start.tv_nsec / 1000000000L;
+                start.tv_nsec = start.tv_nsec % 1000000000L;
+            }
+    
+            clock_gettime(CLOCK_MONOTONIC_RAW, &now);
+            diff = timespec_delta_nanoseconds(&now, &start) - err;
+        } while (diff >= param->period_ns);
+
     }
     pthread_exit(NULL);
 }

@@ -84,7 +84,7 @@ int stick_thread_to_core(int core_id) {
 int set_thread_priority(int priority) {
     struct sched_param schedParam;
     schedParam.sched_priority = priority;
-    int ret = pthread_setschedparam(pthread_self(), SCHED_RR, &schedParam);
+    int ret = pthread_setschedparam(pthread_self(), SCHED_FIFO, &schedParam);
     if(ret != 0) {
         perror("Fehler beim Setzen des Echtzeit-Schedulings");
     }
