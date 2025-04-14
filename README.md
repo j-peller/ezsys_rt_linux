@@ -6,6 +6,11 @@ To build the project for Yocto on Raspberry Pi (aarch64) using Docker, you can u
 sudo docker build -t rpisignal-crossbuild --output type=local,dest=./build .
 ```
 
+or use this command to build it for normal Ubuntu on Rapsberry Pi:
+```bash
+docker buildx build --platform linux/arm64 --build-arg BUILD_TYPE=Release --output type=local,dest=./build
+```
+
 This will create a build output in the `./build` directory, targeting the Raspberry Pi architecture.
 
 # Guide to Perf
