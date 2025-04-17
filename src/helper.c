@@ -1,19 +1,31 @@
+/**
+ * @file helper.c
+ * 
+ * This file contains helper functions for GPIO initialization, Program configuration,
+ * thread management, and data handling. Change at your own risk.
+ * 
+ */
+
 #include "../inc/main.h"
 
 #include <string.h>
 
 
+/* Ringbuffer Capacity */
 #define INITIAL_CAPACITY 1024
 #define CAPACITY_MULTIPLIER 2
+
+/* Helper Macro */
+#define WRITE_TO_RINGBUFFER(rbuffer, timestamp) \
+        (ring_buffer_queue_arr(rbuffer, (char*)&timestamp, sizeof(uint64_t)))
+
 
 /**
  * Forward declarations
  */
-
 FILE* setup_gnuplot();
 void plot_to_gnuplot(measurement_t* m, size_t num, FILE* gp, uint64_t period_ns);
 void print_help(const char* progname);
-
 
 
 /**
@@ -57,6 +69,7 @@ gpio_handle_t* init_gpio(int gpio_pin, const char* gpio_chip) {
     return handle;
 }
 
+
 /**
  * @brief Bind the thread to a specific CPU core.
  *
@@ -75,6 +88,7 @@ int stick_thread_to_core(int core_id) {
     return ret;
 }
 
+
 /**
  * @brief Set thread priority (if needed).
  *
@@ -91,25 +105,6 @@ int set_thread_priority(int priority) {
     return ret;
 }
 
-/**
- * @brief Calculate the clock_gettime() function call overhead.
- * 
- * @return uint64_t overhead in nanoseconds.
- */
-uint64_t get_clock_gettime_overhead() {
-    struct timespec start, end;
-
-    /* Warm up cache */
-    for (int i = 0; i < 10; i++) {
-        clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-        clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-    }
-
-    /* Measure overhead */
-    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-    return timespec_delta_nanoseconds(&end, &start);
-}
 
 /**
  * @brief Dequeue measurements from the ring buffer and store them in a dynamically allocated array.
@@ -141,6 +136,7 @@ int dequeue_measurements(ring_buffer_t* rbuffer, measurement_t** all_measurement
     return 0;
 }
 
+
 /**
  * @brief Write measurements to a CSV file.
  *
@@ -153,7 +149,7 @@ void write_to_file(const char* filename, measurement_t* m, size_t num) {
         return;
     }
 
-    FILE* fp = fopen(filename, "a");
+    FILE* fp = fopen(filename, "w");
     if (fp == NULL) {
         return;
     }
@@ -164,6 +160,7 @@ void write_to_file(const char* filename, measurement_t* m, size_t num) {
 
     fclose(fp);
 }
+
 
 /**
  * @brief Worker thread for handling data and plotting jitter using GNUPlot.
@@ -221,6 +218,7 @@ void* func_data_handler(void* args) {
     pthread_exit(NULL);
 }
 
+
 /**
  * @brief Setup GNUPlot for plotting.
  *
@@ -245,6 +243,7 @@ FILE* setup_gnuplot() {
 
     return gp;
 }
+
 
 /**
  * @brief Plot jitter data to GNUPlot.
@@ -308,6 +307,7 @@ void plot_to_gnuplot(measurement_t* m, size_t num, FILE* gp, uint64_t period_ns)
         fflush(gp);
     }
 }
+
 
 /**
  * @brief Print help message for command line arguments.

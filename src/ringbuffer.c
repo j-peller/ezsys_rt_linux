@@ -17,8 +17,6 @@ void ring_buffer_queue(ring_buffer_t *buffer, char data) {
   /* Is buffer full? */
   if(ring_buffer_is_full(buffer)) {
     /* Is going to overwrite the oldest byte */
-    /* Increase tail index */
-    //buffer->tail_index = ((buffer->tail_index + 1) & RING_BUFFER_MASK(buffer));
     return;
   }
 

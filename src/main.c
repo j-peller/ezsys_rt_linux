@@ -6,18 +6,15 @@
 #include "../inc/ringbuffer.h"
 
 /**
- * @brief Worker thread that toggles a GPIO pin and logs the delay into a ring buffer.
- *
- * This function runs in a separate thread and toggles a GPIO pin at a specified period.
- * It logs the time difference between toggles into a ring buffer.
- *
- * @param args Pointer to the thread arguments (thread_args_t).
- * @return void* Always returns NULL.
+ * 
+ * @brief Worker thread that shall toggle a GPIO pin at a specified frequency while logging
+ *        the time difference between two consequtive toggles.
+ * 
  */
 void* func_signal_gen(void* args) {
     thread_args_t* param = (thread_args_t*)args;
     
-    /* Fixiate this thread to CPU_CORE */
+    /* Stick this thread to specific cpu core */
     stick_thread_to_core(param->core_id);
 
     /* Set thread priority - only if configured */
@@ -25,49 +22,32 @@ void* func_signal_gen(void* args) {
         set_thread_priority(param->sched_prio);
     }
 
-    /* calculate clock_gettime overhead */
-    uint64_t err = get_clock_gettime_overhead();
+    /* Store measured time difference as nanoseconds */
+    uint64_t time_diff_ns = 0;
 
-    int current_state = 0;
-    struct timespec start, now;
-    uint64_t diff;
-    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+    /**
+     * 
+     * Your Code goes here...
+     * 
+     */
 
-    /* Until user stops main program */
+
+
+    /* Main loop for signal generation and time measurement. */
     while (!param->killswitch) {
 
-        /* Busy-Wait until next period */
-        do {
-            clock_gettime(CLOCK_MONOTONIC_RAW, &now);
-        } while ((diff = timespec_delta_nanoseconds(&now, &start) - err) < param->period_ns);
-
-        /* toogle GPIO pin */
-        current_state = !current_state;
-        gpiod_line_set_value(param->gpio->line, current_state);
-
-        /* Write time difference to ring buffer */
-        ring_buffer_queue_arr(param->rbuffer, (char*)&diff, sizeof(uint64_t));
 
         /**
-         * Adjust 'start' to the next valid period in case of delays.
          * 
-         * If the system was interrupted or delayed, this loop advances the 'start' timestamp 
-         * by 'period_ns' until it is ahead of 'now'. 
+         * Your Code goes here... 
          * 
          */
-        do {
-            /* increment start by period_ns - this is called at least once */
-            start.tv_nsec += param->period_ns;
-            if (start.tv_nsec >= 1000000000L) {
-                start.tv_sec += start.tv_nsec / 1000000000L;
-                start.tv_nsec = start.tv_nsec % 1000000000L;
-            }
-    
-            clock_gettime(CLOCK_MONOTONIC_RAW, &now);
-            diff = timespec_delta_nanoseconds(&now, &start) - err;
-        } while (diff >= param->period_ns);
 
+
+        /* Write measured time difference to ringbuffer */
+        WRITE_TO_RINGBUFFER(param->rbuffer, time_diff_ns);
     }
+
     pthread_exit(NULL);
 }
 
@@ -85,9 +65,9 @@ int main(int argc, char** argv) {
         targs.gpio = init_gpio(GPIO_PIN, GPIO_CHIP);
     }
 
-    /* Initialize ring buffer storing measurement results */
-    size_t buffer_size = RING_BUFFER_SIZE * sizeof(measurement_t);
-    char buffer[buffer_size];
+    /* Initialize ringbuffer for storing time measurement results */
+    size_t buffer_size = RING_BUFFER_SIZE * sizeof(uint64_t);
+    uint8_t buffer[buffer_size];
     ring_buffer_t ring_buffer;
     ring_buffer_init(&ring_buffer, buffer, buffer_size);
 
