@@ -40,6 +40,10 @@ typedef size_t ring_buffer_size_t;
  */
 #define RING_BUFFER_MASK(rb) (rb->buffer_mask)
 
+/* Helper Macro */
+#define WRITE_TO_RINGBUFFER(rbuffer, timestamp) \
+        (ring_buffer_queue_arr(rbuffer, (char*)&timestamp, sizeof(uint64_t)))
+
 /**
  * Simplifies the use of <tt>struct ring_buffer_t</tt>.
  */

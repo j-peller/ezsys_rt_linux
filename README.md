@@ -81,3 +81,16 @@ sudo sysctl -w kernel.sched_rt_runtime_us=5000
 ```
 
 This means that in every 1.000.000us (1 Second) period, you get 5000us of real-time task execution. (Period time set in /proc/sys/kernel/sched_rt_period_us)
+
+
+# Requirements for Yocto Docker Build 
+First, the Yocto SDK must be prepared to be used with our dockerfile
+```bash
+bitbake core-image-minimal -c populate_sdk
+```
+
+this creates the required tool chain script to be used in our docker build process. The required file must be copied to the root of our project folder where the dockerfile is stored. 
+
+```bash
+cp YOCTO_ROOT_DIR/poky/build/tmp/deploy/sdk/poky-glibc-x86_64-core-image-minimal-*-toolchain-4.0.25.sh ./sdk.sh 
+```

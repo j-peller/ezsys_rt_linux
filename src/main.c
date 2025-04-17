@@ -67,7 +67,7 @@ int main(int argc, char** argv) {
 
     /* Initialize ringbuffer for storing time measurement results */
     size_t buffer_size = RING_BUFFER_SIZE * sizeof(uint64_t);
-    uint8_t buffer[buffer_size];
+    char buffer[buffer_size];
     ring_buffer_t ring_buffer;
     ring_buffer_init(&ring_buffer, buffer, buffer_size);
 

@@ -15,10 +15,6 @@
 #define INITIAL_CAPACITY 1024
 #define CAPACITY_MULTIPLIER 2
 
-/* Helper Macro */
-#define WRITE_TO_RINGBUFFER(rbuffer, timestamp) \
-        (ring_buffer_queue_arr(rbuffer, (char*)&timestamp, sizeof(uint64_t)))
-
 
 /**
  * Forward declarations
