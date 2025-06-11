@@ -151,8 +151,11 @@ void write_to_file(const char* filename, measurement_t* m, size_t num) {
     }
 
     for (size_t i = 0; i < num; ++i) {
-        fprintf(fp, "%lu,%lu\n", m[i].sampleCount, m[i].diff);
+        fprintf(fp, "%lu%s", 
+            m[i].diff,
+            (i < num - 1) ? "," : "");  // Use comma as separator, no comma after last element
     }
+    fprintf(fp, "\n");
 
     fclose(fp);
 }
