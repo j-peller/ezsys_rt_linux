@@ -331,7 +331,7 @@ void parse_user_args(int argc, char* argv[], thread_args_t* targs) {
     /* Init targs */
     targs->gpio = NULL;
     targs->core_id = CPU_CORE;
-    targs->period_ns = PERIOD_NS(SIGNAL_FREQ);
+    targs->half_period_ns = HALF_PERIOD_NS(SIGNAL_FREQ);
     targs->sched_prio = SCHED_PRIO;
     targs->doPlot = false;
     targs->outputFile = NULL;

@@ -1,14 +1,489 @@
-# Build Instructions
+# EZSYS Realtime Linux Praktikum
 
-To build the project for Yocto on Raspberry Pi (aarch64) using Docker, you can use the following command:
+## 1 Vorbereitung
+
+Ähnlich zum Yocto-Aufgabenblatt aus dem INTP-Praktikum im 3. Semester, werden wir wieder die WSL unter Windows 10 / 11 verwenden für die Entwicklung unserer Testanwendung.
+
+```bash
+mkdir C:\wsl\<name>
+```
+
+WSL prüfen:
+
+```bash
+wsl -l -v
+```
+
+### 1.1 Importieren des vorkonfigurierten WSL-Images
+
+Das Image liegt unter `C:\wsl\export\yocto2024-basic-install.tar`. Der Import-Befehl der WSL ermöglicht es, ein vorkonfiguriertes Image zu laden. Dies geschieht mit dem folgenden Befehl (alle Pfade müssen absolut sein):
+
+```bash
+wsl --import yocto2024 C:\wsl\<name>\yocto2024 E:\wsl\export\yocto2024-basic-install.tar
+```
+
+Prüfen, ob `yocto2024` in WSL verfügbar ist, und als Default setzen:
+
+```bash
+wsl --set-default yocto2024
+```
+
+### 1.2 Installation der Entwicklungsumgebung
+
+```bash
+sudo apt update
+```
+
+```bash
+sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
+```
+
+Docker Repository hinzufügen:
+
+```bash
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+```
+
+```bash
+echo "deb [signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+```
+
+```bash
+sudo apt update
+```
+
+```bash
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+
+User zur Docker-Gruppe hinzufügen:
+
+```bash
+sudo usermod -aG docker $(whoami)
+```
+
+WSL neu starten:
+
+```bash
+sudo shutdown -h now
+```
+
+Oder neue Shell mit neuen Richtlinien:
+
+```bash
+newgrp docker
+```
+
+Wenn Sie das WSL Image aus dem Praktikum verwenden, wird folgendes Kommando notwendig sein, um den Docker Dienst zu starten:
+
+```bash
+sudo update-alternatives --set iptables /usr/sbin/iptables-legacy
+sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
+```
+
+Docker Service manuell starten:
+
+```bash
+sudo service docker start
+```
+
+Test, ob der Service läuft:
+
+```bash
+sudo service docker status
+```
+
+### 1.3 Laden des Code-Templates
+
+Das für dieses Praktikum benötigte Code-Template wird als ZIP via Moodle bereitgestellt. Alternativ kann es per Git geladen werden:
+
+```bash
+git clone https://github.com/j-peller/ezsys_rt_linux.git
+```
+
+### 1.4 Aufbau des Code-Templates
+
+Wechseln Sie in das `RPi_Signal`-Verzeichnis. Es enthält `src/`, `inc/`, sowie zwei Dockerfiles (für Ubuntu & Yocto). Relevante Dateien:
+
+- `src/main.c`
+- `inc/config.h`
+
+GPIO-Pin auf [https://pinout.xyz](https://pinout.xyz) nachschlagen. Pin-Nummer und zugehöriger Chip mit `gpioinfo` oder `gpiofind` ermitteln:
+
+```bash
+gpiofind GPIO26
+```
+### 1.5 Hardware-Aufbau
+
+Verbinden Sie das Oszilloskop mit dem Raspberry Pi: Messprobe an den gewählten GPIO-Pin, Masse an Ground-Pin.
+
+### 1.6 Docker Cross-Compile für aarch64 (Raspberry Pi 4 / 5)
+
+```bash
+docker buildx create --use
+```
+
+```bash
+docker buildx build --platform linux/arm64 --build-arg BUILD_TYPE=Release --output type=local,dest=./build . -f Dockerfile
+```
+
+## 2 Tests auf Standard-Ubuntu 24.04
+
+### 2.1 Implementieren der Signalgenerierung
+
+Sie sollen den Programmcode zur Signalgenerierung und Zeitmessung in der Datei `main.c` implementieren. Der Rumpf der vorgesehenen Thread-Funktion ist bereits gegeben. Fügen Sie Ihren Code an den entsprechend markierten Stellen ein.
+
+Um ein periodisches Signal an einem GPIO-Pin zu erzeugen, müssen Sie den Pin mit der gewünschten Frequenz ein- und ausschalten. Die Frequenz kann entweder
+
+- als Kommandozeilenparameter (`-f <FREQ>`) beim Start des Programms angegeben werden oder
+- statisch in der `config.h` definiert werden.
+
+Die Frequenz wird intern in die halbe Periodendauer in Nanosekunden umgerechnet und steht Ihnen über `param->half_period_ns` innerhalb der Thread-Funktion zur Verfügung.
+
+Beispiel:
+
+Wenn Sie ein Signal mit einer Frequenz von 1 Hz erzeugen möchten, starten Sie das Programm folgendermaßen:
+
+```bash
+./RPISignal -f 1
+```
+
+Die resultierende halbe Periodendauer beträgt 500.000.000 ns.
+
+Implementieren Sie zunächst einen blockierenden Toggle-Mechanismus. Dabei soll der Thread nach jedem Toggle für die Dauer der Periode aktiv warten oder schlafen. Verwenden Sie hierfür z. B. die Funktion `clock_nanosleep()` aus der `time.h`-Bibliothek oder eine andere dafür passende Funktion.
+
+Für die Ansteuerung der GPIO-Pins wird die Bibliothek `libgpiod` verwendet. Die Initialisierung des Pins erfolgt bereits durch die bestehende Initialisierungsroutine. Ihre Aufgabe ist lediglich, den Pin auf 0 oder 1 zu setzen. Hierfür verwenden Sie folgenden Funktionsaufruf:
+
+```c
+gpiod_line_set_value(gpio_line, value);
+```
+
+- `gpio_line` erhalten Sie über `param->gpio->line`
+- `value` ist der gewünschte Ausgabewert (0 oder 1)
+
+**Testen Ihrer Implementierung:**
+
+1. Bauen Sie das Programm:
+
+```bash
+docker buildx build --platform linux/arm64 --build-arg BUILD_TYPE=Release --output type=local,dest=./build . -f Dockerfile
+```
+
+2. Übertragen Sie das erzeugte Binary auf den Raspberry Pi:
+
+```bash
+scp build/RPISignal pi@<IP>:
+```
+
+3. Testen Sie Ihre Implementierung mit einer gewünschten Frequenz und überprüfen Sie das erzeugte Signal mit einem Oszilloskop:
+
+```bash
+./RPISignal -f <FREQ> [-d <GPIOCHIP:GPIOPIN>]
+```
+
+Beispiel:
+
+```bash
+./RPISignal -f 1
+```
+
+### 2.2 Implementieren der Zeitmessung
+
+In diesem Teil sollen Sie die Zeit messen, die in Software vergeht, bis der nächste GPIO-Toggle ausgelöst wird. Ziel ist es, die tatsächliche Periode zwischen den Umschaltungen zu erfassen und diese Werte zur späteren Auswertung in einem Ringpuffer zu speichern.
+
+**Vorgehensweise:**
+
+- Erfassen Sie zu Beginn einer Periode einen Zeitstempel
+- Nach Ablauf der Periodendauer soll der GPIO-Pin getoggled werden
+- Bestimmen Sie die verstrichene Zeit seit dem letzten Toggle und speichern Sie diese im bereitgestellten Ringpuffer
+- Zum Speichern der Zeitdifferenzen steht Ihnen ein Helper-Macro zur Verfügung:
+
+```c
+WRITE_TO_RINGBUFFER(rbuffer, timestamp);
+```
+
+`rbuffer` erhalten Sie über `param->rbuffer`
+
+**Hinweise zur Zeitmessung (mögliche Ansätze):**
+
+- Sie können die Funktion `clock_gettime()` verwenden, um Zeitstempel mit Nanosekunden-Auflösung zu erfassen.
+- Achten Sie darauf, dass Ihre Zeitmessung ausschließlich die Zeit zwischen zwei GPIO-Toggles erfasst und nicht durch weitere Funktionsaufrufe oder andere Berechnungen verfälscht wird.
+- Stellen Sie sicher, dass die Zeitmessung innerhalb der Thread-Funktion erfolgt.
+
+**Testen Ihrer Implementierung:**
+
+1. Bauen Sie das Programm:
+
+```bash
+docker buildx build --platform linux/arm64 --build-arg BUILD_TYPE=Release --output type=local,dest=./build . -f Dockerfile
+```
+
+2. Übertragen Sie das erzeugte Binary auf den Raspberry Pi:
+
+```bash
+scp build/RPISignal pi@<IP>:
+```
+
+3. Führen Sie die Anwendung aus und exportieren Sie die Zeitdifferenzen in eine Datei:
+
+```bash
+./RPISignal -f 10 -o output.csv
+```
+
+Wenn Sie die Ergebnisse während der Ausführung live visualisieren möchten:
+
+```bash
+./RPISignal -f 10 -o output.csv -g
+```
+
+**Ausführen & CSV exportieren:**\*\*
+
+```bash
+./RPISignal -f 10 -o output.csv
+./RPISignal -f 10 -o output.csv -g
+```
+
+### 2.3 Experimentieren
+
+Beobachten Sie Frequenz, Periode und Jitter.
+
+Mit CPU-Fixierung:
+
+```bash
+./RPISignal -f 100 -c 1 -o stress_100Hz.csv
+```
+
+Last erzeugen:
+
+```bash
+stress-ng -c 1 --switch 8 --timeout 30s --metrics-brief
+```
+
+Analysieren Sie:
+
+- Wie verändert sich das Signal unter Last?
+- Histogramm oder Boxplot der Zeitdifferenzen erstellen
+
+### 2.4 Implementieren eines Polling-Basierten Ansatzes
+
+In Ihrer ersten Implementierung haben Sie einen blockierenden Aufruf wie `clock_nanosleep()` verwendet, um die gewünschte Periodendauer abzuwarten.  
+
+**Ziel dieser Aufgabe:** Ihre Implementierung zu modifizieren und stattdessen einen Polling-basierten Ansatz (Busy-Waiting) zu realisieren.
+
+**Hinweise:**
+
+- Achten Sie darauf, dass Ihre Zeitmessung weiterhin nur die tatsächliche Dauer zwischen zwei GPIO-Toggles umfasst.  
+- Speichern Sie unbedingt Ihren aktuellen Code, da wir diesen für spätere Tests nochmal benötigen.
+
+
+### 2.5 Experimentieren
+
+Vergleichen Sie beide Varianten. Nutzen Sie `perf` zur Analyse:
+
+```bash
+sudo perf stat -e context-switches -C 1 ./RPISignal -f 100 -c 1
+```
+
+Weitere Events:
+
+```bash
+perf list
+```
+
+## 3 Tests auf einem Yocto-basierten Linux
+
+### 3.1 Yocto Linux vorbereiten
+
+Bevor Sie mit diesem Abschnitt beginnen, stellen Sie sicher, dass die Yocto-Umgebung gemäß dem Yocto-Arbeitsblatt aus dem INTP-Praktikum eingerichtet wurde (insbesondere Abschnitt 2.2).
+
+Für die späteren Tests mit unserer Anwendung benötigen wir Tools und Bibliotheken im Yocto Image. Öffnen Sie dazu die Datei local.conf (build/conf/local.conf) in Ihrem Yocto Projekt und fügen Sie am Ende der Datei die folgenden Zeilen hinzu:
+
+```bash
+IMAGE_INSTALL:append = " openssh"
+IMAGE_INSTALL:append = " libgcc"
+IMAGE_INSTALL:append = " libgpiod"
+IMAGE_INSTALL:append = " stress-ng"
+IMAGE_INSTALL:append = " perf"
+```
+
+Die meta-raspberrypi-Layer stellt zwei verschiedene Kernel-Versionen bereit. Für unser Projekt verwenden wir die neuere Version 6.1. Dazu fügen Sie ebenfalls am Ende der local.conf die folgenden Zeilen hinzu:
+
+```bash
+PREFERRED_PROVIDER_virtual_kernel = "linux-raspberrypi"
+PREFERRED_VERSION_linux_raspberrypi = "6.1%"
+```
+
+Stellen Sie außerdem sicher, dass Sie das Yocto-Image für die korrekte Hardware-Plattform erstellen. Öffnen Sie dazu die Datei local.conf und überprüfen bzw. setzen Sie den Eintrag MACHINE entsprechend Ihrer Zielplattform:
+
+```bash
+MACHINE ?= "raspberrypi5"
+```
+
+### 3.2 Yocto SDK vorbereiten
+
+Um Ihre Anwendung für ein Yocto-basiertes Linux zu bauen, benötigen wir die Yocto-SDK. Dieses SDK enthält alle notwendigen Werkzeuge und Bibliotheken zum Cross-Kompilieren für die Zielplattform.
+
+Wechseln Sie zunächst in Ihr Yocto-Projektverzeichnis und initialisieren Sie die Build-Umgebung:
+
+```bash
+source oe-init-build-env
+```
+
+Man wechselt automatisch in das Build-Verzeichnis. Zur Erstellung des SDKs führen Sie den folgenden bitbake-Befehl aus:
+
+```bash
+bitbake core-image-minimal -c populate_sdk
+```
+
+Nach erfolgreichem Abschluss befindet sich das SDK als Shell-Skript im folgenden Verzeichnis:
+
+```bash
+build/tmp/deploy/sdk/
+```
+
+Kopieren Sie das generierte Shell-Skript (Dateiendung .sh) in Ihren Projektordner und benennen Sie es in sdk.sh um:
+
+```bash
+cp build/tmp/deploy/sdk/poky*.sh ~/ezsys_rt_linux/sdk.sh
+```
+
+### 3.3 Bauen der Testanwendung für Yocto
+
+Für das Bauen der Testanwendung für Yocto gibt es auch hier wieder ein vordefiniertes 
+Dockerfile, das den Cross-Compile-Prozess in diesem Praktikum vereinfacht.  
+
+Bauen Sie nun Ihre zuletzt entwickelte Signalgenerierung für den Raspberry Pi mit Yocto:
+
+1. Bauen Sie das Programm:
 
 ```bash
 sudo docker build -t rpisignal-crossbuild --output type=local,dest=./build . -f Dockerfile.yocto
 ```
 
-or use this command to build it for normal Ubuntu on Rapsberry Pi:
+2. Übertragen Sie das erzeugte Binary auf den Raspberry Pi:
+
 ```bash
-sudo docker buildx build --platform linux/arm64 --build-arg BUILD_TYPE=Release --output type=local,dest=./build . -f Dockerfile
+scp build/RPISignal root@<IP>:
 ```
 
-This will create a build output in the `./build` directory, targeting the Raspberry Pi architecture.
+3. Auf dem Raspberry: Passen Sie die Berechtigungen des Programms vor Ausführung an:
+
+```bash
+chmod ug+x RPISignal
+```
+
+4. Auf dem Raspberry: Führen Sie die Anwendung aus und überprüfen Sie die 
+Signalfrequenz am Oszilloskop:
+
+```bash
+./RPISignal -f 100 [-d <GPIOCHIP:GPIOPIN>]
+```
+
+### 3.4 Experimentieren
+
+Führen Sie alle Tests aus Abschnitt 2 erneut unter Yocto aus und vergleichen Sie die Ergebnisse.
+
+## 4 Linux-Kernel Optimierungen
+
+### 4.1 Realtime Patches für den Linux Kernel
+
+Seit 2005 gibt es für den Linux-Kernel sogenannte Realtime Patches (PREEMPT\_RT), die ursprünglich unabhängig vom offiziellen Kernel-Entwicklungszweig entwickelt wurden. Im Jahr 2021 wurden zentrale Bestandteile des PREEMPT\_RT-Patches in den Mainline-Linux-Kernel integriert.
+
+Im Yocto-Layer für den Raspberry Pi sind diese Realtime-Patches jedoch standardmäßig nicht enthalten und müssen daher manuell eingebunden werden. Gehen Sie dazu wie folgt vor:
+
+1. Wechseln Sie in das Hauptverzeichnis Ihrer Yocto-Installation (dort, wo sich die anderen Yocto-Layer befinden), und klonen Sie die benötigte Layer:
+
+```bash
+git clone -b yocto-rpi-rt-6.1-patch git@github.com:j-peller/ezsys_rt_linux.git meta-rpi-signalgen
+```
+
+2. Fügen Sie die neue Layer in Ihre Yocto-Umgebung ein:
+
+```bash
+bitbake-layers add-layer meta-rpi-signalgen
+```
+
+3. Überprüfen Sie, ob die Layer erfolgreich hinzugefügt wurde:
+
+```bash
+bitbake-layers show-layers
+```
+
+Um den Realtime-Patch zu aktivieren, muss die Kernel-Konfiguration entsprechend angepasst werden. Starten Sie die interaktive Konfigurationsoberfläche:
+
+```bash
+bitbake -c menuconfig virtual/kernel
+```
+
+Navigieren Sie dort zu folgendem Menüpunkt und aktivieren Sie die Option „Fully Preemptible Kernel“:
+
+```
+General Setup → Preemption Model → Fully Preemptible Kernel
+```
+
+Nachdem Sie die Konfiguration gespeichert haben, bauen Sie ein neues Yocto-Image und flashen Sie es auf die SD-Karte des Raspberry Pi:
+
+```bash
+bitbake core-image-minimal
+```
+
+### 4.2 Periodische Interrupts Deaktivieren (tickless mode)
+
+Linux-Systeme wie Yocto nutzen standardmäßig periodische Timer-Interrupts (Ticks), um Aufgaben wie das Prozess-Scheduling oder Systemzeiterfassung durchzuführen. Diese Interrupts treten in festen Abständen auf, egal ob sie aktuell benötigt werden und beeinträchtigen damit die Echtzeitfähigkeit des Systems.
+
+Sehen Sie sich die Gesamtanzahl der Interrupts seit Systemstart mit folgendem Befehl an:
+
+```bash
+cat /proc/interrupts
+```
+
+**Aufgabe:** Welche Interrupts treten besonders häufig auf und auf welchem CPU-Kern?
+
+Mit der Kernel-Option `CONFIG_NO_HZ_FULL` lässt sich dieser periodische Interrupt für bestimmte CPUs vollständig deaktivieren. Dadurch können betriebssystembedingte Verzögerungen minimiert werden und echtzeitkritische Tasks auf einer dafür vorgesehenen CPU ausgeführt werden.
+
+Navigieren Sie zum Menüpunkt „Timer tick handling“ und aktivieren Sie „Full dynticks system“:
+
+```
+General Setup → Timers subsystem → Timer tick handling → Full dynticks system
+```
+
+Abschließend muss festgelegt werden, welche CPU(s) von NO\_HZ\_FULL profitieren sollen, also keine periodischen Scheduling-Interrupts mehr erhalten, solange sie idle sind oder nur eine Userspace-Task ausführen. Um dies zu konfigurieren, fügen Sie in die `local.conf` Ihres Yocto-Builds folgende Zeile ein:
+
+```bash
+CMDLINE:append = " nohz_full=1 isolcpus=1"
+```
+
+Hiermit wird der CPU-Kern 1 von periodischen Interrupts ausgenommen und isoliert, sodass der Scheduler keine Tasks auf diesem Kern einplant. General Setup → Timers subsystem → Timer tick handling → Full dynticks system
+
+````
+
+In `local.conf` einfügen:
+
+```bash
+CMDLINE:append = " nohz_full=1 isolcpus=1"
+````
+
+Interrupts prüfen:
+
+```bash
+cat /proc/interrupts
+```
+
+### 4.3 Weitere Optimierungen (RCU Callbacks, IRQ Affinity)
+
+... (bitte ergänzen)
+
+## 5 Weitere Aufgaben Ideen
+
+- Priority Inversion selber implementieren
+  - [https://github.com/ShawnHymel/introduction-to-rtos/tree/main/11-priority-inversion](https://github.com/ShawnHymel/introduction-to-rtos/tree/main/11-priority-inversion)
+
+## 6 Probleme
+
+```bash
+sudo update-alternatives --set iptables /usr/sbin/iptables-legacy
+sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
+```
+
+- GPIOCHIP und GPIOPIN Bezeichnung in den Beispielen irreführend
+- CTRL+C beendet das Programm, CSV wird nicht geschrieben → Signalhandler einbauen

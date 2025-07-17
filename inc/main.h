@@ -25,7 +25,7 @@
 
 #define MAX_SIGNAL_FREQ     10000           /* MAX Target signal frequency*/
 #define SEC_IN_NS           1000000000UL    
-#define PERIOD_NS(freq)     (SEC_IN_NS / ( 2 * freq ))
+#define HALF_PERIOD_NS(freq)     (SEC_IN_NS / ( 2 * freq ))
 
 #define WINDOW_SIZE     100                 /* Samples to show in GNUPlot */
 #define WINDOW_REFRESH  200                 /* Refresh GNUPLot every 200ms */
@@ -40,7 +40,7 @@ typedef struct {
 typedef struct {
     gpio_handle_t*  gpio;
     ring_buffer_t*  rbuffer;
-    uint64_t        period_ns;
+    uint64_t        half_period_ns;
     int             sched_prio;
     int             timer_fd;
     int             core_id;
