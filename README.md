@@ -396,9 +396,10 @@ make INSTALL_MOD_PATH=../modinstall modules_install
 
 ### 3.7 Neuen Kernel + Module auf Raspberry Pi übertragen
 ```bash
-rsync -av arch/arm64/boot/Image root@<ip>:/boot/firmware/vmlinuz
-rsync -av arch/arm64/boot/dts/broadcom/*dtb arch/arm64/boot/dts/overlays root@<ip>:/boot/firmware/.
-rsync -av --exclude='../modinstall/lib/modules/*/build' ../modinstall/lib/modules/* root@<ip>:/lib/modules/.
+rsync -v arch/arm64/boot/Image root@<ip>:/boot/firmware/vmlinuz
+rsync -v arch/arm64/boot/dts/broadcom/*dtb arch/arm64/boot/dts/overlays root@<ip>:/boot/firmware/.
+rsync -v arch/arm64/boot/dts/overlays/* root@<ip>:/boot/firmware/overlays/.
+rsync -v --exclude='../modinstall/lib/modules/*/build' ../modinstall/lib/modules/* root@<ip>:/lib/modules/.
 ```
 
 - `Image → /boot/firmware/vmlinuz`: ersetzt den Kernel.
@@ -419,7 +420,7 @@ sudo reboot
 > Der Befehl `uname -a` zeigt u. a. den Kernelnamen, die Version und das Build-Datum. Beispielausgabe:
 >
 > ```
-> Linux ubuntu 6.16.0-rt1+ #1 SMP PREEMPT_RT Mon Jul 22 14:03:00 UTC 2024 aarch64 aarch64 aarch64 GNU/Linux
+> Linux ubuntu 6.16.0-rc6-v8+ #3 SMP PREEMPT_RT Mon Jul 22 14:03:00 UTC 2024 aarch64 aarch64 aarch64 GNU/Linux
 > ```
 >
 > - Der String `PREEMPT_RT` weist auf einen Echtzeitkernel hin.
