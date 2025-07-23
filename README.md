@@ -182,14 +182,9 @@ scp build/RPISignal pi@<IP>:
 
 3. Testen Sie Ihre Implementierung mit einer gewünschten Frequenz und überprüfen Sie das erzeugte Signal mit einem Oszilloskop:
 
+Beispiel mit Ausgabe am Pin 26:
 ```bash
-./RPISignal -f <FREQ> [-d <GPIOCHIP:GPIOPIN>]
-```
-
-Beispiel:
-
-```bash
-./RPISignal -f 1
+./RPISignal -f 100 -d gpiochip4:26
 ```
 
 ---
@@ -511,8 +506,10 @@ chmod ug+x RPISignal
 4. Auf dem Raspberry: Führen Sie die Anwendung aus und überprüfen Sie die 
 Signalfrequenz am Oszilloskop:
 
+Beispiel mit Ausgabe am Pin 26:
+
 ```bash
-./RPISignal -f 100 [-d <GPIOCHIP:GPIOPIN>]
+./RPISignal -f 100 -d gpiochip4:26
 ```
 
 ### 3.4 Experimentieren
