@@ -14,6 +14,7 @@ WSL prüfen:
 wsl -l -v
 ```
 
+---
 ### 1.1 Importieren des vorkonfigurierten WSL-Images
 
 Das Image liegt unter `C:\wsl\export\yocto2024-basic-install.tar`. Der Import-Befehl der WSL ermöglicht es, ein vorkonfiguriertes Image zu laden. Dies geschieht mit dem folgenden Befehl (alle Pfade müssen absolut sein):
@@ -28,13 +29,11 @@ Prüfen, ob `yocto2024` in WSL verfügbar ist, und als Default setzen:
 wsl --set-default yocto2024
 ```
 
+---
 ### 1.2 Installation der Entwicklungsumgebung
 
 ```bash
 sudo apt update
-```
-
-```bash
 sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
 ```
 
@@ -50,9 +49,6 @@ echo "deb [signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://dow
 
 ```bash
 sudo apt update
-```
-
-```bash
 sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 ```
 
@@ -66,6 +62,11 @@ WSL neu starten:
 
 ```bash
 sudo shutdown -h now
+```
+
+Bzw. in der Powershell:
+```ps
+wsl.exe --shutdown
 ```
 
 Oder neue Shell mit neuen Richtlinien:
@@ -93,6 +94,7 @@ Test, ob der Service läuft:
 sudo service docker status
 ```
 
+---
 ### 1.3 Laden des Code-Templates
 
 Das für dieses Praktikum benötigte Code-Template wird als ZIP via Moodle bereitgestellt. Alternativ kann es per Git geladen werden:
@@ -101,6 +103,7 @@ Das für dieses Praktikum benötigte Code-Template wird als ZIP via Moodle berei
 git clone https://github.com/j-peller/ezsys_rt_linux.git
 ```
 
+---
 ### 1.4 Aufbau des Code-Templates
 
 Wechseln Sie in das `RPi_Signal`-Verzeichnis. Es enthält `src/`, `inc/`, sowie zwei Dockerfiles (für Ubuntu & Yocto). Relevante Dateien:
@@ -113,10 +116,12 @@ GPIO-Pin auf [https://pinout.xyz](https://pinout.xyz) nachschlagen. Pin-Nummer u
 ```bash
 gpiofind GPIO26
 ```
+---
 ### 1.5 Hardware-Aufbau
 
 Verbinden Sie das Oszilloskop mit dem Raspberry Pi: Messprobe an den gewählten GPIO-Pin, Masse an Ground-Pin.
 
+---
 ### 1.6 Docker Cross-Compile für aarch64 (Raspberry Pi 4 / 5)
 
 ```bash
@@ -187,6 +192,7 @@ Beispiel:
 ./RPISignal -f 1
 ```
 
+---
 ### 2.2 Implementieren der Zeitmessung
 
 In diesem Teil sollen Sie die Zeit messen, die in Software vergeht, bis der nächste GPIO-Toggle ausgelöst wird. Ziel ist es, die tatsächliche Periode zwischen den Umschaltungen zu erfassen und diese Werte zur späteren Auswertung in einem Ringpuffer zu speichern.
@@ -243,52 +249,181 @@ Wenn Sie die Ergebnisse während der Ausführung live visualisieren möchten:
 ./RPISignal -f 10 -o output.csv -g
 ```
 
+---
 ### 2.3 Experimentieren
+Test Sie Ihre Implementierung des Signalgenerators und beobachten Sie das Laufzeitverhalten Ihres erzeugten Signals insbesondere das Verhalten ihrer Frequenz und der in Software gemessenen tatsächliche Periode. 
 
-Beobachten Sie Frequenz, Periode und Jitter.
+#### 2.3.1 Was fällt Ihnen hinsichtlich der CPU-Auslastung auf?
+Starten Sie die Anwendung mit der Option -c <0,1,2,3>, um den Thread zur Signalgenerierung auf einem bestimmen CPU-Kern zu fixieren und gucken Sie sich die Auslastung mit dem Tool top an. 
 
-Mit CPU-Fixierung:
-
-```bash
-./RPISignal -f 100 -c 1 -o stress_100Hz.csv
-```
-
-Last erzeugen:
+Mit CPU-Fixierung und live Visualisierung:
 
 ```bash
-stress-ng -c 1 --switch 8 --timeout 30s --metrics-brief
+./RPISignal -f 100 -c 1 -g
 ```
 
-Analysieren Sie:
+#### 2.3.2 Nutzen Sie den CSV-Export und erstellen Sie eine Auswertung (Excel,...)
+Visualisieren Sie die Verteilung der aufgezeichneten Zeitdifferenzen mithilfe eines Histogramms oder Box-Plot Diagramms
+1. Wie verhält sich der Jitter?  
+2. Wie verhält sich die Periode im Durchschnitt? 
+3. Welche Worst-Cases können Sie beobachten? 
 
-- Wie verändert sich das Signal unter Last?
-- Histogramm oder Boxplot der Zeitdifferenzen erstellen
 
+---
 ### 2.4 Implementieren eines Polling-Basierten Ansatzes
+In Ihrer ersten Implementierung haben Sie eine blockierenden Aufruf wie `clock_nanosleep()` verwendet, um die gewünschte periodendauer abzuwarten.  Ziel dieser Aufgabe ist es nun, Ihre Implementierung zu modifizieren und stattdessen einen Polling-basierten Ansatz (busy-waiting) zu realisieren. 
 
-In Ihrer ersten Implementierung haben Sie einen blockierenden Aufruf wie `clock_nanosleep()` verwendet, um die gewünschte Periodendauer abzuwarten.  
-
-**Ziel dieser Aufgabe:** Ihre Implementierung zu modifizieren und stattdessen einen Polling-basierten Ansatz (Busy-Waiting) zu realisieren.
-
-**Hinweise:**
-
+**Hinweis**
 - Achten Sie darauf, dass Ihre Zeitmessung weiterhin nur die tatsächliche Dauer zwischen zwei GPIO-Toggles umfasst.  
 - Speichern Sie unbedingt Ihren aktuellen Code, da wir diesen für spätere Tests nochmal benötigen.
 
-
+---
 ### 2.5 Experimentieren
 
-Vergleichen Sie beide Varianten. Nutzen Sie `perf` zur Analyse:
+#### 2.5.1 Vergleichen Sie die Ergebnisse der Polling-basierten Implementierung mit denen des blockierenden Ansatzes. 
+Nutzen Sie das Tool perf, um einen tieferen Einblick in das Scheduling Verhalten zu erhalten. Mit folgendem Befehl starten Sie perf zeitgleich mit der Testanwendung. Wenn Sie die Signalgenerierung beenden, erhalten Sie eine Auswertung der aufgezeichneten Events auf dem CPU-Kern 1 (hier nur das Event context-switches): 
 
 ```bash
 sudo perf stat -e context-switches -C 1 ./RPISignal -f 100 -c 1
-```
+```  
 
-Weitere Events:
+- Welche perf Events könnten weitere Einblick in das Scheduling Verhalten geben? 
+  - Siehe: `perf list` und recherchieren Sie im Internet 
+
+#### 2.5.2 Vor- und Nachteile des Polling-Ansatzes
+Welche Vor- und Nachteile hat ein Polling-basierter Ansatz im Vergleich zum blockierenden Ansatz?
+
+Denken Sie dabei z. B. an Reaktionszeit, CPU-Auslastung, Energieverbrauch und typische Einsatzszenarien in Echtzeitsystemen oder energieeffizienten Anwendungen. Wann ist welcher Ansatz sinnvoller?
+
+
+## 3 Realtime Linux Kernel für Ubuntu (RPi4 & 5)
+
+###  3.1 Abhängigkeiten auf dem Host installieren
+
+Auf dem **Host-System** (z.B. Laborrechner, Laptop oder WSL unter Windows):
 
 ```bash
-perf list
+sudo apt update
+sudo apt install -y git bc bison flex libssl-dev make libc6-dev libncurses5-dev crossbuild-essential-arm64 u-boot-tools device-tree-compiler libelf-dev wget rsync
 ```
+
+---
+
+### 3.2 Kernel-Quellcode von Raspberry Pi herunterladen
+
+In einem Verzeichnis Ihrer Wahl (z.B. `/home/$(whoami)`)
+
+```bash
+git clone --depth=1 https://github.com/raspberrypi/linux.git -b rpi-6.16.y
+cd linux
+```
+
+> Dies lädt den aktuellsten Raspberry Pi Linux-Kernel für die Version `6.16.y` herunter.
+---
+
+### 3.3 Cross-Compile Umgebung setzen
+
+```bash
+export ARCH=arm64
+export CROSS_COMPILE=aarch64-linux-gnu-
+```
+
+> ️Setzt die Zielarchitektur (`arm64`) und die Toolchain-Präfixe für das Cross-Kompilieren. Diese Umgebungsvariablen gelten für den aktuellen Terminal-Tab und wird benötigt, um den Kernel für den Raspberry Pi 5 bzw. Raspberry Pi 4 zu kompilieren.
+
+---
+
+###  3.4: Konfiguration vorbereiten und anpassen
+
+#### Für Raspberry Pi 4 oder Pi 5:
+
+```bash
+make bcm2711_defconfig
+```
+
+#### Dann:
+
+```bash
+make menuconfig
+```
+
+#### In `menuconfig`:
+
+```text
+General setup  --->
+  (X) Fully Preemptible Kernel (Real-Time)
+```
+
+```text
+CPU Power Management --->
+  CPU Frequency scaling --->
+    ( ) CPU Frequency scaling deaktivieren
+```
+
+```text
+Kernel Features --->
+  Timer frequency --->
+    (X) 1000 Hz
+```
+
+**Speichern und beenden**
+
+---
+
+### 3.5 Kernel, Module und Device Trees bauen
+
+Im Verzeichnis `linux/`:
+
+```bash
+make -j$(nproc) Image modules dtbs
+```
+
+> Baut den Kernel (`Image`), Kernel-Module (`modules`) und Device Trees (`dtbs`) für den Raspberry Pi. 
+
+----
+
+### 3.6 Module installieren
+
+Im Verzeichnis `linux/`:
+
+```bash
+mkdir ../modinstall
+make INSTALL_MOD_PATH=../modinstall modules_install
+```
+
+> Installiert die kompilierten Module in ein temporäres Verzeichnis `../modinstall`, um sie später auf den Raspberry Pi zu übertragen.
+
+---
+
+### 3.7 Neuen Kernel + Module auf Raspberry Pi übertragen
+```bash
+rsync -av arch/arm64/boot/Image root@<ip>:/boot/firmware/vmlinuz
+rsync -av arch/arm64/boot/dts/broadcom/*dtb arch/arm64/boot/dts/overlays root@<ip>:/boot/firmware/.
+rsync -av --exclude='../modinstall/lib/modules/*/build' ../modinstall/lib/modules/* root@<ip>:/lib/modules/.
+```
+
+- `Image → /boot/firmware/vmlinuz`: ersetzt den Kernel.
+- `*.dtb + overlays → /boot/firmware/`: aktuelle Device Trees für den Pi.
+- `modules → /lib/modules/`: die neu gebauten Kernel-Module.
+
+---
+
+### 3.8 Neustart & Überprüfen der Kernel Version
+Auf dem Raspberry Pi:
+
+```bash
+sudo reboot
+```
+
+> **Prüfe, ob der neue Kernel aktiv ist:**
+>
+> Der Befehl `uname -a` zeigt u. a. den Kernelnamen, die Version und das Build-Datum. Beispielausgabe:
+>
+> ```
+> Linux ubuntu 6.16.0-rt1+ #1 SMP PREEMPT_RT Mon Jul 22 14:03:00 UTC 2024 aarch64 aarch64 aarch64 GNU/Linux
+> ```
+>
+> - Der String `PREEMPT_RT` weist auf einen Echtzeitkernel hin.
+> - Das Build-Datum hilft zu erkennen, ob es der frisch gebaute Kernel ist.
 
 ## 3 Tests auf einem Yocto-basierten Linux
 
@@ -468,22 +603,3 @@ Interrupts prüfen:
 ```bash
 cat /proc/interrupts
 ```
-
-### 4.3 Weitere Optimierungen (RCU Callbacks, IRQ Affinity)
-
-... (bitte ergänzen)
-
-## 5 Weitere Aufgaben Ideen
-
-- Priority Inversion selber implementieren
-  - [https://github.com/ShawnHymel/introduction-to-rtos/tree/main/11-priority-inversion](https://github.com/ShawnHymel/introduction-to-rtos/tree/main/11-priority-inversion)
-
-## 6 Probleme
-
-```bash
-sudo update-alternatives --set iptables /usr/sbin/iptables-legacy
-sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
-```
-
-- GPIOCHIP und GPIOPIN Bezeichnung in den Beispielen irreführend
-- CTRL+C beendet das Programm, CSV wird nicht geschrieben → Signalhandler einbauen
